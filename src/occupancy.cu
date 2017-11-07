@@ -24,8 +24,8 @@ void getGPU(int *);
 
 int main() {
 
-    // DEVICE, MAX BLOCK SIZE, #SMS
-    int devInfo [3];
+    // DEVICE, MAX BLOCK SIZE, #SMS, MAX GRID SIZE, MAX THREADS, WARP SIZE, # REGISTERS PER BLOCK
+    int devInfo [7];
     getGPU(devInfo);
 
     // IF MULTIPLE DEVICES PRESENT, USE DEVICE WITH LARGEST BLOCK SIZE
@@ -48,10 +48,42 @@ int main() {
 
 
 // SETS [ GPUID, BLOCKSIZE, #SMs ] TO MAXIMIZE BLOCK SIZE
+/* Device property struct:
+
+    struct cudaDeviceProp {
+        char name[256];
+        size_t totalGlobalMem;
+        size_t sharedMemPerBlock;
+        int regsPerBlock;
+        int warpSize;
+        size_t memPitch;
+        int maxThreadsPerBlock;
+        int maxThreadsDim[3];
+        int maxGridSize[3];
+        size_t totalConstMem;
+        int major;
+        int minor;
+        int clockRate;
+        size_t textureAlignment;
+        int deviceOverlap;
+        int multiProcessorCount;
+        int kernelExecTimeoutEnabled;
+        int integrated;
+        int canMapHostMemory;
+        int computeMode;
+        int concurrentKernels;
+        int ECCEnabled;
+        int pciBusID;
+        int pciDeviceID;
+        int tccDriver;
+    }
+*/
 void getGPU(int * devInfo) {
 
-    int dev_count, deviceToUse, blockSize, numSMs;
+    int dev_count, deviceToUse, blockSize, numSMs, 
+    	gridSize, maxThreads, warpSize, regsPerBlock;
     dev_count = deviceToUse = blockSize = numSMs = 0;
+    warpSize = regsPerBlock = maxThreads = gridSize = 0;
 
     // GET NUMBER OF DEVICES
     cudaDeviceProp dev_prop;
@@ -65,14 +97,21 @@ void getGPU(int * devInfo) {
     for (int i = 0; i < dev_count; i++) {
         cudaGetDeviceProperties(&dev_prop, i);
         if (dev_prop.maxThreadsPerBlock > blockSize) {
+        	gridSize = dev_prop.maxGridSize[0];
             blockSize = dev_prop.maxThreadsPerBlock;
+            warpSize = dev_prop.warpSize;
+            regsPerBlock = dev_prop.regsPerBlock;
+            maxThreads = dev_prop.maxThreadsDim[0];
             numSMs = dev_prop.multiProcessorCount;
             deviceToUse = i;
         }
     }
 
-    // SET GPUID TO USE, ITS BLOCK SIZE, AND ITS SM COUNT
-    devInfo[0] = deviceToUse;
-    devInfo[1] = blockSize;
-    devInfo[2] = numSMs;
+    devInfo[0] = deviceToUse; 	// GPU ID
+    devInfo[1] = blockSize;		// Max block size
+    devInfo[2] = numSMs;		// # SMs
+    devInfo[3] = gridSize;		// Max grid size
+    devInfo[4] = maxThreads; 	// Max # threads
+    devInfo[5] = warpSize; 		// Warp size
+    devInfo[6] = regsPerBlock;	// # Registers per block
 }
