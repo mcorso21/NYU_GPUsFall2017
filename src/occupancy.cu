@@ -14,6 +14,7 @@
 #include <string>
 #include <iostream>
 #include <iomanip>
+#include <locale.h>
 
 using std::cout;
 using std::setw;
@@ -24,6 +25,8 @@ void getGPU(int *);
 
 int main() {
 
+	setlocale(LC_NUMERIC, "");
+
     // DEVICE, MAX BLOCK SIZE, #SMS, MAX GRID SIZE, MAX THREADS, WARP SIZE, # REGISTERS PER BLOCK
     int devInfo [7];
     getGPU(devInfo);
@@ -32,10 +35,14 @@ int main() {
     cudaSetDevice(devInfo[0]);
 
     if (testing) {
-        printf("\nGPU Info:\n\t%-15s %d\n\t%-15s %d\n\t%-15s %d", 
+        printf("\nGPU Info:\n\t%-15s %'d\n\t%-15s %'d\n\t%-15s %'d\n\t%-15s %'d\n\t%-15s %'d\n\t%-15s %'d\n\t%-15s %'d\n", 
             "Device ID", devInfo[0],
+            "Grid Size", devInfo[3],
             "Block Size", devInfo[1],
-            "# SMs", devInfo[2]
+            "Max Threads", devInfo[4],
+            "# SMs", devInfo[2],
+            "Warp Size", devInfo[5],
+            "# Registers", devInfo[6]
             );
 
     }
