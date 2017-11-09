@@ -19,11 +19,14 @@
 using std::cout;
 using std::setw;
 
+__global__
+void doubleInt (int N, int blockSize);
+
 bool testing = true;
 
 void getGPU(int *);
 
-int main() {
+int main(int argc, char * argv[]) {
 
 	// GOAL: CURRENT WARPS / MAX WARPS PER SM
 	/*
@@ -46,6 +49,15 @@ int main() {
 
 	setlocale(LC_NUMERIC, "");
 
+	    // HOW TO USE
+    if(argc != 3) {
+        fprintf( stderr, "Usage: './occupancy [N] [blockSize]'\n" );
+        exit( 1 );
+    }
+
+    int N = (int) atoi(argv[1]);
+    int blockSize = (int) atoi(argv[2]);
+
     // DEVICE, MAX BLOCK SIZE, #SMS, MAX GRID SIZE, MAX THREADS, WARP SIZE, # REGISTERS PER BLOCK, MAJOR, MINOR
     int devInfo [9];
     getGPU(devInfo);
@@ -67,10 +79,23 @@ int main() {
 
     }
 
-    // dim3 dimGrid(ceil (N / blockSize), 1, 1);                       
-    // dim3 dimBlock((int) blockSize, 1, 1);
+    dim3 dimGrid(1, 1, 1);                       
+    dim3 dimBlock((int) devInfo[1], (blockSize / devInfo[1]), 1);
 
     return 0;
+}
+
+__global__
+void doubleInt (int N, int blockSize) {
+
+	int id = (blockIdx.x * blockDim.x) + threadIdx.x;
+
+	id * 2;
+
+	while ((id + blockSize) < N) {
+		id += blockSize;
+		id * 2;
+	}
 }
 
 
