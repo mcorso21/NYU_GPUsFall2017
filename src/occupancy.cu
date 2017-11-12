@@ -50,7 +50,7 @@ int main(int argc, char * argv[]) {
 	setlocale(LC_NUMERIC, "");
 
 	    // HOW TO USE
-    if(argc != 3) {
+    if(argc != 2) {
         fprintf( stderr, "Usage: './occupancy [percentTargetOccupancy]'\n" );
         exit( 1 );
     }
