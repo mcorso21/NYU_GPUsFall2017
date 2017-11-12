@@ -119,7 +119,10 @@ void doubleInt (int N, int blockSize) {
 		id * 2.0;
 	}
 
-    printf("Hello thread %d \n", id);
+
+    #if __CUDA_ARCH__ >= 200
+        printf("Hello thread %d \n", id);
+    #endif
 }
 
 
