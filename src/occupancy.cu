@@ -8,6 +8,25 @@
  * 
  */
 
+// GOAL: CURRENT WARPS / MAX WARPS PER SM
+/*
+	IDEA #1
+
+	Create a block of 2048, which is 100% warp occupancy (2048/32 [warp size] = 64 [max # warps])
+
+	In bash script
+		blockSize = 2048
+		while (blockSize >= 32)
+			Call occupancy.cu with block/grid size
+		
+	In occupancy.cu
+		gridSize = arg
+		blockSize = arg
+
+		call kernel function with grid/block size 
+
+*/
+
 #include <cuda.h>
 #include <stdlib.h>
 #include <stdio.h>
@@ -22,36 +41,18 @@ using std::setw;
 __global__
 void doubleInt (int N, int blockSize);
 
-bool testing = true;
+bool testing = false;
 
 void getGPU(int *);
 
 int main(int argc, char * argv[]) {
-
-	// GOAL: CURRENT WARPS / MAX WARPS PER SM
-	/*
-		IDEA #1
-
-		Create a block of 2048, which is 100% warp occupancy (2048/32 [warp size] = 64 [max # warps])
-
-		In bash script
-			blockSize = 2048
-			while (blockSize >= 32)
-				Call occupancy.cu with block/grid size
-			
-		In occupancy.cu
-			gridSize = arg
-			blockSize = arg
-
-			call kernel function with grid/block size 
-
-	*/
 
 	setlocale(LC_NUMERIC, "");
 
 	    // HOW TO USE
     if(argc != 2) {
         fprintf( stderr, "Usage: './occupancy [percentTargetOccupancy]'\n" );
+        fprintf( stderr, "\tIE: './occupancy 75' runs the kernel with 75%% occupancy.\n" );
         exit( 1 );
     }
 
@@ -92,14 +93,15 @@ int main(int argc, char * argv[]) {
     * Each block handles 922 threads
     */
     int targetOccupancy = (int) atoi(argv[1]); // percent ex: 100% 90%
-    int numThreads = ceil((targetOccupancy/100.0) * 64 * 32); // threads to achieved target occupancy
+    // ***** occupancy above 50% is inaccurate, need to figure this out
+    int numThreads = ceil((targetOccupancy/100.0) * maxWarps * threadsPerWarp); // threads to achieved target occupancy
     int numBlocksPerGrid = ceil((float) numThreads/maxThreadsPerBlock);
     int blockSize = ceil((float) numThreads/numBlocksPerGrid);
 
-    dim3 dimGrid(numBlocksPerGrid, 1, 1);                       
-    dim3 dimBlock(blockSize, 1, 1);
+    dim3 dimGrid(1, 1, 1);                       
+    dim3 dimBlock(blockSize, numBlocksPerGrid, 1);
 
-    int problemSize = maxWarps * threadsPerWarp; // 2048
+    int problemSize = (maxWarps * threadsPerWarp) * 1000; // 2048
 
     doubleInt<<<dimGrid, dimBlock>>>(problemSize, blockSize);
 
@@ -120,9 +122,9 @@ void doubleInt (int N, int blockSize) {
 	}
 
 
-    #if __CUDA_ARCH__ >= 200
-        printf("Hello thread %d \n", id);
-    #endif
+    // #if __CUDA_ARCH__ >= 200
+    //     printf("Hello thread %d \n", id);
+    // #endif
 }
 
 
