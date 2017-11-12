@@ -50,13 +50,10 @@ int main(int argc, char * argv[]) {
 	setlocale(LC_NUMERIC, "");
 
 	    // HOW TO USE
-    if(argc != 3) {
-        fprintf( stderr, "Usage: './occupancy [N] [blockSize]'\n" );
+    if(argc != 2) {
+        fprintf( stderr, "Usage: './occupancy [percentTargetOccupancy]'\n" );
         exit( 1 );
     }
-
-    int N = (int) atoi(argv[1]);
-    int blockSize = (int) atoi(argv[2]);
 
     // DEVICE, MAX BLOCK SIZE, #SMS, MAX GRID SIZE, MAX THREADS, WARP SIZE, # REGISTERS PER BLOCK, MAJOR, MINOR
     int devInfo [9];
@@ -76,12 +73,37 @@ int main(int argc, char * argv[]) {
             "Warp Size", devInfo[5],
             "# Registers", devInfo[6]
             );
-
     }
 
-    dim3 dimGrid(1, 1, 1);                       
-    dim3 dimBlock((int) devInfo[1], (blockSize / devInfo[1]), 1);
+    /****************
+    * Device specific
+    *****************/
+    int maxWarps = 64;
+    int threadsPerWarp = devInfo[5]; // 32
+    int maxThreadsPerBlock = devInfo[1];
 
+    /***************************
+    * Dynamic thread computation
+    ****************************/
+    /*
+    * Given 90% target occupancy
+    * max 2048 threads * 90% = 1844
+    * Split into 2 blocks on the grid 
+    * Each block handles 922 threads
+    */
+    int targetOccupancy = (int) atoi(argv[1]); // percent ex: 100% 90%
+    int numThreads = ceil((targetOccupancy/100.0) * 64 * 32); // threads to achieved target occupancy
+    int numBlocksPerGrid = ceil((float) numThreads/maxThreadsPerBlock);
+    int blockSize = ceil((float) numThreads/numBlocksPerGrid);
+
+    dim3 dimGrid(numBlocksPerGrid, 1, 1);                       
+    dim3 dimBlock(blockSize, 1, 1);
+
+    int problemSize = maxWarps * threadsPerWarp; // 2048
+
+    doubleInt<<<dimGrid, dimBlock>>>(problemSize, blockSize);
+
+    cudaDeviceSynchronize();
     return 0;
 }
 
@@ -90,12 +112,17 @@ void doubleInt (int N, int blockSize) {
 
 	int id = (blockIdx.x * blockDim.x) + threadIdx.x;
 
-	id * 2;
+	id * 2.0;
 
 	while ((id + blockSize) < N) {
 		id += blockSize;
-		id * 2;
+		id * 2.0;
 	}
+
+
+    #if __CUDA_ARCH__ >= 200
+        printf("Hello thread %d \n", id);
+    #endif
 }
 
 
