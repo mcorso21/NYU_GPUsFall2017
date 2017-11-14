@@ -42,7 +42,7 @@ using std::setw;
 bool testing = false;
 
 // CPU FUNCTIONS
-void getGPU(int *);
+void getGPU();
 void test_MaxBlocksPerSM();
 void getMaxBlocksPerSM();
 void getMaxWarpsPerSM();
@@ -72,24 +72,24 @@ int main(int argc, char * argv[]) {
     }
 
     // DEVICE, MAX BLOCK SIZE, #SMS, MAX GRID SIZE, MAX THREADS, WARP SIZE, # REGISTERS PER BLOCK, MAJOR, MINOR
-    int devInfo [9];
-    getGPU(devInfo);
+    // int devInfo [9];
+    getGPU();
 
     // IF MULTIPLE DEVICES PRESENT, USE DEVICE WITH LARGEST BLOCK SIZE
-    cudaSetDevice(devInfo[0]);
+    // cudaSetDevice(devInfo[0]);
 
-    if (testing) {
-        printf("\nGPU Info:\n\t%-15s %'d\n\t%-15s %d.%d\n\t%-15s %'d\n\t%-15s %'d\n\t%-15s %'d\n\t%-15s %'d\n\t%-15s %'d\n\t%-15s %'d\n", 
-            "Device ID", devInfo[0],
-            "Compute C.", devInfo[7], devInfo[8], 
-            "Grid Size", devInfo[3],
-            "Block Size", devInfo[1],
-            "Max Threads", devInfo[4],
-            "# SMs", devInfo[2],
-            "Warp Size", devInfo[5],
-            "# Registers", devInfo[6]
-            );
-    }
+    // if (testing) {
+    //     printf("\nGPU Info:\n\t%-15s %'d\n\t%-15s %d.%d\n\t%-15s %'d\n\t%-15s %'d\n\t%-15s %'d\n\t%-15s %'d\n\t%-15s %'d\n\t%-15s %'d\n", 
+    //         "Device ID", devInfo[0],
+    //         "Compute C.", devInfo[7], devInfo[8], 
+    //         "Grid Size", devInfo[3],
+    //         "Block Size", devInfo[1],
+    //         "Max Threads", devInfo[4],
+    //         "# SMs", devInfo[2],
+    //         "Warp Size", devInfo[5],
+    //         "# Registers", devInfo[6]
+    //         );
+    // }
 
  //    /****************
  //    * Device specific
@@ -121,12 +121,14 @@ int main(int argc, char * argv[]) {
  // //    doubleInt<<<dimGrid, dimBlock>>>(problemSize, blockSize);
 	// // cudaDeviceSynchronize();
 
+    problemSize = 10;
 
     int targetOccupancy = (int) atoi(argv[1]); // percent ex: 100% 90%
-    
+
 	// UPDATE DEVICE VARIABLES
     getMaxBlocksPerSM();
     getMaxWarpsPerSM();
+
 
 	// Tests saturate:
 	// 		(1) warps (per SM or grid or both), 
@@ -135,7 +137,7 @@ int main(int argc, char * argv[]) {
 	// 		(4) blocks per SM
 	
 	test_MaxBlocksPerSM();
-
+	
     return 0;
 }
 
@@ -180,10 +182,12 @@ void test_MaxBlocksPerSM() {
 	int totalBlocks = (numSMs * numBlocksPerSM);
 
     dim3 dimGrid(totalBlocks, 1, 1);                       
-    dim3 dimBlock(ceil((problemSize / totalBlocks)), 1, 1);
+    // dim3 dimBlock(ceil((problemSize / totalBlocks)), 1, 1); // THIS WAS CRASHING
 
-	doubleInt<<<dimGrid, dimBlock>>>(problemSize, (problemSize / totalBlocks));
-	cudaDeviceSynchronize();
+
+
+	// doubleInt<<<dimGrid, dimBlock>>>(problemSize, (problemSize / totalBlocks));
+	// cudaDeviceSynchronize();
 }
 
 __global__
@@ -237,15 +241,11 @@ void doubleInt (int N, int blockSize) {
     }
 */
 
-// CHANGE TO RETURN GPU WITH HIGHEST CUDA CAPABILITY INSTEAD OF MAX BLOCK SIZE
-// INSTEAD OF WRITING TO ARRAY, WRITE TO GLOBAL VARIABLES FOR EASY REUSE
-void getGPU(int * devInfo) {
+void getGPU() {
 
-    int dev_count, deviceToUse, blockSize,  
-    	gridSize, maxThreads, warpSize, regsPerBlock;
-    dev_count = deviceToUse = blockSize = numSMs = 0;
-    warpSize = regsPerBlock = maxThreads = gridSize = 0;
-
+    int dev_count, deviceToUse, maxCCmajor, maxCCminor;
+    dev_count = deviceToUse = maxCCmajor = maxCCminor = 0;
+    
     // GET NUMBER OF DEVICES
     cudaDeviceProp dev_prop;
     cudaGetDeviceCount(&dev_count);
@@ -257,26 +257,14 @@ void getGPU(int * devInfo) {
     // WHICH DEVICE HAS LARGEST BLOCK SIZE
     for (int i = 0; i < dev_count; i++) {
         cudaGetDeviceProperties(&dev_prop, i);
-        if (dev_prop.maxThreadsPerBlock > blockSize) {
-        	gridSize = dev_prop.maxGridSize[0];
-            blockSize = dev_prop.maxThreadsPerBlock;
-            warpSize = dev_prop.warpSize;
-            regsPerBlock = dev_prop.regsPerBlock;
-            maxThreads = dev_prop.maxThreadsDim[0];
-            numSMs = dev_prop.multiProcessorCount;
+        if ((dev_prop.major > maxCCmajor) || ((dev_prop.major == maxCCmajor) && (dev_prop.minor > maxCCminor))) {
             deviceToUse = i;
-            compCapMajor = dev_prop.major;
-    		compCapMinor = dev_prop.minor;
+            maxCCmajor = dev_prop.major;
+    		maxCCminor = dev_prop.minor;
         }
     }
 
-    devInfo[0] = deviceToUse; 	// GPU ID
-    devInfo[1] = blockSize;		// Max block size
-    devInfo[2] = numSMs;		// # SMs
-    devInfo[3] = gridSize;		// Max grid size
-    devInfo[4] = maxThreads; 	// Max # threads
-    devInfo[5] = warpSize; 		// Warp size
-    devInfo[6] = regsPerBlock;	// # Registers per block
-    devInfo[7] = dev_prop.major;
-    devInfo[8] = dev_prop.minor;
+    cudaSetDevice(deviceToUse);
+    compCapMajor = maxCCmajor;
+    compCapMinor = maxCCminor;
 }
