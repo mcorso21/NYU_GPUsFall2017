@@ -38,12 +38,27 @@
 using std::cout;
 using std::setw;
 
+// DEBUG/TESTING
+bool testing = false;
+
+// CPU FUNCTIONS
+void getGPU(int *);
+void test_MaxBlocksPerSM();
+void getMaxBlocksPerSM();
+void getMaxWarpsPerSM();
+
+// GPU FUNCTIONS
 __global__
 void doubleInt (int N, int blockSize);
 
-bool testing = false;
+// TEST VARIABLES
+int problemSize;
 
-void getGPU(int *);
+// DEVICE VARIABLES
+int numThreadsPerSM, numBlocksPerSM, numWarpsPerSM, numSMs, compCapMajor, compCapMinor;
+
+// DEVICE CONSTANTS
+int numThreadsPerBlock = 1024;
 
 int main(int argc, char * argv[]) {
 
@@ -76,37 +91,99 @@ int main(int argc, char * argv[]) {
             );
     }
 
-    /****************
-    * Device specific
-    *****************/
-    int maxWarps = 64;
-    int threadsPerWarp = devInfo[5]; // 32
-    int maxThreadsPerBlock = devInfo[1];
+ //    /****************
+ //    * Device specific
+ //    *****************/
+ //    int maxWarps = 64;
+ //    int threadsPerWarp = devInfo[5]; // 32
+ //    int maxThreadsPerBlock = devInfo[1];
 
-    /***************************
-    * Dynamic thread computation
-    ****************************/
-    /*
-    * Given 90% target occupancy
-    * max 2048 threads * 90% = 1844
-    * Split into 2 blocks on the grid 
-    * Each block handles 922 threads
-    */
+ //    /***************************
+ //    * Dynamic thread computation
+ //    ****************************/
+ //    /*
+ //    * Given 90% target occupancy
+ //    * max 2048 threads * 90% = 1844
+ //    * Split into 2 blocks on the grid 
+ //    * Each block handles 922 threads
+ //    */
+    // int targetOccupancy = (int) atoi(argv[1]); // percent ex: 100% 90%
+ //    // // ***** occupancy above 50% is inaccurate, need to figure this out
+ //    int numThreads = ceil((targetOccupancy/100.0) * maxWarps * threadsPerWarp); // threads to achieved target occupancy
+ //    int numBlocksPerGrid = ceil((float) numThreads/maxThreadsPerBlock);
+ //    int blockSize = ceil((float) numThreads/numBlocksPerGrid);
+
+ //    dim3 dimGrid(1, 1, 1);                       
+ //    dim3 dimBlock(blockSize, numBlocksPerGrid, 1);
+
+ //    problemSize = (maxWarps * threadsPerWarp) * 1000; // 2048
+
+ // //    doubleInt<<<dimGrid, dimBlock>>>(problemSize, blockSize);
+	// // cudaDeviceSynchronize();
+
+
     int targetOccupancy = (int) atoi(argv[1]); // percent ex: 100% 90%
-    // ***** occupancy above 50% is inaccurate, need to figure this out
-    int numThreads = ceil((targetOccupancy/100.0) * maxWarps * threadsPerWarp); // threads to achieved target occupancy
-    int numBlocksPerGrid = ceil((float) numThreads/maxThreadsPerBlock);
-    int blockSize = ceil((float) numThreads/numBlocksPerGrid);
+    
+	// UPDATE DEVICE VARIABLES
+    getMaxBlocksPerSM();
+    getMaxWarpsPerSM();
 
-    dim3 dimGrid(1, 1, 1);                       
-    dim3 dimBlock(blockSize, numBlocksPerGrid, 1);
+	// Tests saturate:
+	// 		(1) warps (per SM or grid or both), 
+	// 		(2) threads per block, 
+	// 		(3) threads per SM, and 
+	// 		(4) blocks per SM
+	
+	test_MaxBlocksPerSM();
 
-    int problemSize = (maxWarps * threadsPerWarp) * 1000; // 2048
-
-    doubleInt<<<dimGrid, dimBlock>>>(problemSize, blockSize);
-
-    cudaDeviceSynchronize();
     return 0;
+}
+
+// MAX NUMBER OF BLOCKS ASSIGNABLE TO AN SM
+void getMaxBlocksPerSM() {
+
+	if (compCapMajor == 2) numBlocksPerSM = 8;
+	else if (compCapMajor == 3) numBlocksPerSM = 16;
+	else if ((compCapMajor == 5) || (compCapMajor == 6)) numBlocksPerSM = 32;
+	else {
+		printf("\n No max blocks settings for Compute Capability %d.%d\n", 
+			compCapMajor, compCapMinor);
+		exit(0);
+	}
+}
+
+// MAX NUMBER OF WARPS AND THREADS THAT CAN RUN ON AN SM
+void getMaxWarpsPerSM() {
+
+	if (compCapMajor == 2) numWarpsPerSM = 48;
+	else if ((compCapMajor == 3) || (compCapMajor == 5)) numWarpsPerSM = 64;
+	else if (compCapMajor == 6) {
+		if (compCapMinor == 2) numWarpsPerSM = 128;
+		else numWarpsPerSM = 64;
+	}
+	else {
+		printf("\n No max warp settings for Compute Capability %d.%d\n", 
+			compCapMajor, compCapMinor);
+		exit(0);
+	}
+	// ASSIGN MAX THREADS PER SM
+	numThreadsPerSM = (numWarpsPerSM * 32);
+}
+
+// TEST OCCUPANCY BY MAXING OUT BLOCKS FOR EVERY SM
+void test_MaxBlocksPerSM() {
+
+	if (testing) 
+		printf("Number of SMs: %d\nBlocks per SM: %d", 
+			numSMs, numBlocksPerSM);
+
+	int totalBlocks = (numSMs * numBlocksPerSM);
+
+    dim3 dimGrid(totalBlocks, 1, 1);                       
+    dim3 dimBlock(ceil((problemSize / totalBlocks)), 1, 1);
+
+	doubleInt<<<dimGrid, dimBlock>>>(problemSize, (problemSize / totalBlocks));
+	cudaDeviceSynchronize();
 }
 
 __global__
@@ -159,9 +236,12 @@ void doubleInt (int N, int blockSize) {
         int tccDriver;
     }
 */
+
+// CHANGE TO RETURN GPU WITH HIGHEST CUDA CAPABILITY INSTEAD OF MAX BLOCK SIZE
+// INSTEAD OF WRITING TO ARRAY, WRITE TO GLOBAL VARIABLES FOR EASY REUSE
 void getGPU(int * devInfo) {
 
-    int dev_count, deviceToUse, blockSize, numSMs, 
+    int dev_count, deviceToUse, blockSize,  
     	gridSize, maxThreads, warpSize, regsPerBlock;
     dev_count = deviceToUse = blockSize = numSMs = 0;
     warpSize = regsPerBlock = maxThreads = gridSize = 0;
@@ -185,6 +265,8 @@ void getGPU(int * devInfo) {
             maxThreads = dev_prop.maxThreadsDim[0];
             numSMs = dev_prop.multiProcessorCount;
             deviceToUse = i;
+            compCapMajor = dev_prop.major;
+    		compCapMinor = dev_prop.minor;
         }
     }
 
