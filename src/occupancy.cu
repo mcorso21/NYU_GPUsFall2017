@@ -49,6 +49,7 @@ void test_BlocksPerSM();
 void test_ThreadsPerBlock();
 void test_ThreadsPerSM();
 void test_WarpsPerSM();
+void test_threadsPerBlockPerKernel();
 
 // GPU SPEC FUNCTIONS
 void initDeviceVars();
@@ -97,7 +98,9 @@ int main(int argc, char * argv[]) {
 
     // GET USER-SPECIFIED VARIABLES
     occupancyMethod = (int) atoi(argv[1]);
-    targetOccupancy = (atoi(argv[2]) > 100) ? 1.0 : ((double) (atoi(argv[2]) / 100.0));
+    targetOccupancy = ((double) (atoi(argv[2]) / 100.0));
+    if (targetOccupancy > 1.0) targetOccupancy = 1.0;
+    if (targetOccupancy == 0.0) targetOccupancy = 0.01;
     problemSize = (int) atoi(argv[3]);
     
     // MAX BLOCKS THAT CAN RUN SIMULTANEOUSLY
@@ -116,12 +119,35 @@ int main(int argc, char * argv[]) {
     else if (occupancyMethod == 3) {
         test_WarpsPerSM();
     }
+    // THREADS/BLOCK INVERSED WITH BLOCKS/KERNEL
+    else if (occupancyMethod == 4) {
+        test_threadsPerBlockPerKernel();
+    }
     else {
         printf("\nNot an acceptable occupancyMethod!\n");
         howToUse();
     }
 		
     return 0;
+}
+
+// THREADS/BLOCK INVERSED WITH BLOCKS/KERNEL
+// THIS ACTS LIKE A SEESAW: TOTALBLOCKS GOES UP AS THREADS PER BLOCK GOES DOWN AND VICE VERSA
+void test_threadsPerBlockPerKernel() {
+
+    int totalBlocks = ((numSMs * maxBlocksPerSM) * targetOccupancy);
+    int threadsPerBlock = maxThreadsPerBlock * (1.0 - targetOccupancy);
+    if (threadsPerBlock <= 0) threadsPerBlock = 1;
+    if (totalBlocks <= 0) totalBlocks = 1;
+
+    dim3 dimGrid(totalBlocks, 1, 1);                       
+    dim3 dimBlock(threadsPerBlock, 1, 1);
+
+    if (TESTING) printf("\ntest_threadsPerBlockPerKernel running with:\n\ttotalBlocks = %d\n\tblockSize = %d\n", 
+        totalBlocks, threadsPerBlock);
+
+    doubleInt<<<dimGrid, dimBlock>>>(problemSize, threadsPerBlock);
+    cudaDeviceSynchronize();
 }
 
 // TOTAL BLOCKS
@@ -285,7 +311,7 @@ void getMaxWarpsPerSM() {
 void howToUse() {
 
     fprintf( stderr, "\nUsage: './occupancy [occupancyMethod] [targetOccupancy] [problemSize]'");
-    fprintf( stderr, "\n\tOccupancy Method:\n\t0: %% of max blocks that can run simultaneously\n\t1: %% of max threads per block\n\t2: %% of max threads per SM\n\t3: %% of max warps per SM");
+    fprintf( stderr, "\n\tOccupancy Method:\n\t0: %% of max blocks that can run simultaneously\n\t1: %% of max threads per block\n\t2: %% of max threads per SM\n\t3: %% of max warps per SM\n\t4: %% will inversely scale number of blocks with threads per block");
     fprintf( stderr, "\n\n\tIE: './occupancy 3 75 100000' runs the kernel with 75%% of max warps per SM with a problem size of 100,000");
 
     exit( 1 );
