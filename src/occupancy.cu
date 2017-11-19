@@ -38,13 +38,21 @@
 using std::cout;
 using std::setw;
 
-// DEBUG/TESTING
-bool testing = true;
+// DEBUG/TEST
+#define TESTING true
 
-// CPU FUNCTIONS
+//
+void howToUse();
+
+// OCCUPANCY FUNCTIONS
+void test_BlocksPerSM();
+void test_ThreadsPerBlock();
+void test_ThreadsPerSM();
+void test_WarpsPerSM();
+
+// GPU SPEC FUNCTIONS
 void initDeviceVars();
 void getGPU();
-void test_MaxBlocksPerSM();
 void getMaxBlocksPerSM();
 void getMaxWarpsPerSM();
 
@@ -53,7 +61,8 @@ __global__
 void doubleInt (int N, int blockSize);
 
 // TEST VARIABLES
-int problemSize;
+int problemSize, occupancyMethod;
+double targetOccupancy;
 
 // DEVICE VARIABLES
 char * deviceName;
@@ -70,17 +79,13 @@ int main(int argc, char * argv[]) {
 	setlocale(LC_NUMERIC, "");
 
 	// HOW TO USE
-    if(argc != 2) {
-        fprintf( stderr, "Usage: './occupancy [percentTargetOccupancy]'\n" );
-        fprintf( stderr, "\tIE: './occupancy 75' runs the kernel with 75%% occupancy.\n" );
-        exit( 1 );
-    }
+    if(argc != 4) howToUse();
 
 	// UPDATE DEVICE VARIABLES
 	initDeviceVars();
 
-    if (testing) {
-        printf("\nGPU Info:\n\t%-15s %s\n\t%-15s %d.%d\n\t%-15s %'d\n\t%-15s %'d\n\t%-15s %'d\n\t%-15s %'d\n", 
+    if (TESTING) {
+        printf("\nGPU Info:\n\t%-15s %s\n\t%-15s %d.%d\n\t%-15s %d\n\t%-15s %d\n\t%-15s %d\n\t%-15s %d\n", 
             "Device ID", deviceName,
             "Compute C.", compCapMajor, compCapMinor, 
             "Grid Size", maxThreadsPerGrid,
@@ -90,31 +95,106 @@ int main(int argc, char * argv[]) {
             );
     }
 
-    problemSize = 10;
-
-    int targetOccupancy = (int) atoi(argv[1]); // percent ex: 100% 90%
-
-	// Tests saturate:
-	// 		(1) warps (per SM or grid or both), 
-	// 		(2) threads per block, 
-	// 		(3) threads per SM, and 
-	// 		(4) blocks per SM
-	
-	test_MaxBlocksPerSM();
-	
+    // GET USER-SPECIFIED VARIABLES
+    occupancyMethod = (int) atoi(argv[1]);
+    targetOccupancy = (atoi(argv[2]) > 100) ? 1.0 : ((double) (atoi(argv[2]) / 100.0));
+    problemSize = (int) atoi(argv[3]);
+    
+    // MAX BLOCKS THAT CAN RUN SIMULTANEOUSLY
+    if (occupancyMethod == 0) {
+        test_BlocksPerSM();
+    }
+    // MAX THREADS PER BLOCK
+    else if (occupancyMethod == 1) {
+        test_ThreadsPerBlock();
+    }
+    // MAX THREADS PER SM
+    else if (occupancyMethod == 2) {
+        test_ThreadsPerSM();
+    }
+    // MAX WARPS PER SM
+    else if (occupancyMethod == 3) {
+        test_WarpsPerSM();
+    }
+    else {
+        printf("\nNot an acceptable occupancyMethod!\n");
+        howToUse();
+    }
+		
     return 0;
 }
 
-// TEST OCCUPANCY BY MAXING OUT BLOCKS FOR EVERY SM
-void test_MaxBlocksPerSM() {
+// TOTAL BLOCKS
+void test_BlocksPerSM() {
 
-	int totalBlocks = (numSMs * maxBlocksPerSM);
+    int totalBlocks = ((numSMs * maxBlocksPerSM) * targetOccupancy);
+    int threadsPerBlock = maxThreadsPerBlock;
 
     dim3 dimGrid(totalBlocks, 1, 1);                       
-    // dim3 dimBlock(ceil((problemSize / totalBlocks)), 1, 1); // THIS WAS CRASHING
+    dim3 dimBlock(threadsPerBlock, 1, 1);
 
-	// doubleInt<<<dimGrid, dimBlock>>>(problemSize, (problemSize / totalBlocks));
-	// cudaDeviceSynchronize();
+    if (TESTING) printf("\ntest_MaxBlocksPerSM running with:\n\ttotalBlocks = %d\n\tblockSize = %d\n", 
+        totalBlocks, threadsPerBlock);
+
+    doubleInt<<<dimGrid, dimBlock>>>(problemSize, threadsPerBlock);
+    cudaDeviceSynchronize();
+}
+
+// THREADS PER BLOCK (USES MAX NUMBER OF BLOCKS)
+void test_ThreadsPerBlock() {
+
+    int totalBlocks = (numSMs * maxBlocksPerSM);
+    int threadsPerBlock = (maxThreadsPerBlock * (targetOccupancy));
+
+    dim3 dimGrid(totalBlocks, 1, 1);                       
+    dim3 dimBlock(threadsPerBlock, 1, 1);
+
+    if (TESTING) printf("\ntest_ThreadsPerBlock running with:\n\ttotalBlocks = %d\n\tblockSize = %d\n", 
+        totalBlocks, threadsPerBlock);
+
+    doubleInt<<<dimGrid, dimBlock>>>(problemSize, threadsPerBlock);
+    cudaDeviceSynchronize();
+}
+
+// THREADS PER SM
+
+/* MAX NUMBER OF BLOCKS, REDUCE THREADS IN BLOCK TO LESSEN MAX THREADS IN AN SM
+ * ISN'T THIS THE SAME RESULT AS test_ThreadsPerBlock? Redundant?
+ */
+
+void test_ThreadsPerSM() {
+
+    // int totalBlocks = (numSMs * maxBlocksPerSM);
+    
+    // dim3 dimGrid(totalBlocks, 1, 1);                       
+    // dim3 dimBlock(maxThreadsPerBlock, 1, 1);
+
+    // if (TESTING) printf("\test_ThreadsPerSM running with:\n\ttotalBlocks = %d\n\tblockSize = %d\n", 
+    //     totalBlocks, maxThreadsPerBlock);
+
+    // doubleInt<<<dimGrid, dimBlock>>>(problemSize, threadsPerBlock);
+    // cudaDeviceSynchronize();
+}
+
+// WARPS PER SM
+/* SAME QUESTION HERE AS FOR THREADSPERSM ... 
+ * MAX NUMBER OF BLOCKS, REDUCE THREADS IN BLOCK TO LESSEN MAX THREADS IN AN SM
+ * ISN'T THIS THE SAME RESULT AS test_ThreadsPerBlock? Redundant?
+ */
+
+void test_WarpsPerSM() {
+
+    // int totalBlocks = (numSMs * maxBlocksPerSM);
+    // int threadsPerBlock = maxThreadsPerBlock;
+
+    // dim3 dimGrid(totalBlocks, 1, 1);                       
+    // dim3 dimBlock(threadsPerBlock, 1, 1);
+
+    // if (TESTING) printf("\test_WarpsPerSM running with:\n\ttotalBlocks = %d\n\tblockSize = %d\n", 
+    //     totalBlocks, threadsPerBlock);
+
+    // doubleInt<<<dimGrid, dimBlock>>>(problemSize, threadsPerBlock);
+    // cudaDeviceSynchronize();
 }
 
 __global__
@@ -200,6 +280,15 @@ void getMaxWarpsPerSM() {
 	}
 	// ASSIGN MAX THREADS PER SM
 	maxThreadsPerSM = (maxWarpsPerSM * 32);
+}
+
+void howToUse() {
+
+    fprintf( stderr, "\nUsage: './occupancy [occupancyMethod] [targetOccupancy] [problemSize]'");
+    fprintf( stderr, "\n\tOccupancy Method:\n\t0: %% of max blocks that can run simultaneously\n\t1: %% of max threads per block\n\t2: %% of max threads per SM\n\t3: %% of max warps per SM");
+    fprintf( stderr, "\n\n\tIE: './occupancy 3 75 100000' runs the kernel with 75%% of max warps per SM with a problem size of 100,000");
+
+    exit( 1 );
 }
 
 
