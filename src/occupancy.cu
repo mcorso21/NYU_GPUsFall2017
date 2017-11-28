@@ -54,7 +54,7 @@
 #include <iomanip>
 
 // DEBUG/TEST
-#define TESTING true
+#define TESTING false
 
 //
 void howToUse();
