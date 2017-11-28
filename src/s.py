@@ -3,7 +3,7 @@ import os
 import subprocess as sp
 from datetime import datetime
 
-problemSize = 100000
+problemSize = 100000000
 output = []
 
 # FOR EACH TARGET OCCPUANCY 5-100, 5% INCREMENTS

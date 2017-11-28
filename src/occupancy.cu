@@ -52,6 +52,8 @@
 #include <cuda.h>
 #include <iostream>
 #include <iomanip>
+#include <stdlib.h>
+#include <stdio.h>
 
 // DEBUG/TEST
 #define TESTING false
