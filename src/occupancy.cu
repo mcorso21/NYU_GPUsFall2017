@@ -74,7 +74,7 @@ void getMaxWarpsPerSM();
 
 // GPU FUNCTIONS
 __global__
-void doubleInt (int N, int blockSize);
+void doubleInt (int, int);
 
 // TEST VARIABLES
 int problemSize, occupancyMethod;
@@ -126,6 +126,10 @@ int main(int argc, char * argv[]) {
     else if (occupancyMethod == 2) {
         test_ThreadsPerBlockPerKernel();
     }
+    // THREADS AND BLOCKS SCALED TOGETHER
+    else if (occupancyMethod == 3) {
+        test_ThreadsPerBlockPerKernel();
+    }
     else {
         printf("\nNot an acceptable occupancyMethod!\n");
         howToUse();
@@ -134,11 +138,29 @@ int main(int argc, char * argv[]) {
     return 0;
 }
 
+// BLOCKS PER KERNEL AND THREADS PER BLOCK
+void test_threadsAndBlocks() {
+
+    int totalBlocks = ((numSMs * maxBlocksPerSM) * targetOccupancy);
+    int threadsPerBlock = (maxThreadsPerBlock * targetOccupancy);
+    int totalThreads = totalBlocks * threadsPerBlock;
+
+    dim3 dimGrid(totalBlocks, 1, 1);                       
+    dim3 dimBlock(threadsPerBlock, 1, 1);
+
+    if (TESTING) printf("\ntest_threadsAndBlocks running with:\n\ttotalBlocks\t%d\t%d%%\n\tblockSize\t%d\t100%%\n", 
+        totalBlocks, ((int) (targetOccupancy * 100)), threadsPerBlock);
+
+    doubleInt<<<dimGrid, dimBlock>>>(problemSize, totalThreads);
+    cudaDeviceSynchronize();
+}
+
 // BLOCKS PER SM / TOTAL BLOCKS IN THE KERNEL (USES MAX NUMBER OF THREADS PER BLOCK)
 void test_BlocksPerSM() {
 
     int totalBlocks = ((numSMs * maxBlocksPerSM) * targetOccupancy);
     int threadsPerBlock = maxThreadsPerBlock;
+    int totalThreads = totalBlocks * threadsPerBlock;
 
     dim3 dimGrid(totalBlocks, 1, 1);                       
     dim3 dimBlock(threadsPerBlock, 1, 1);
@@ -146,7 +168,7 @@ void test_BlocksPerSM() {
     if (TESTING) printf("\ntest_MaxBlocksPerSM running with:\n\ttotalBlocks\t%d\t%d%%\n\tblockSize\t%d\t100%%\n", 
         totalBlocks, ((int) (targetOccupancy * 100)), threadsPerBlock);
 
-    doubleInt<<<dimGrid, dimBlock>>>(problemSize, threadsPerBlock);
+    doubleInt<<<dimGrid, dimBlock>>>(problemSize, totalThreads);
     cudaDeviceSynchronize();
 }
 
@@ -155,6 +177,7 @@ void test_ThreadsPerBlock() {
 
     int totalBlocks = (numSMs * maxBlocksPerSM);
     int threadsPerBlock = (maxThreadsPerBlock * targetOccupancy);
+    int totalThreads = totalBlocks * threadsPerBlock;
 
     dim3 dimGrid(totalBlocks, 1, 1);                       
     dim3 dimBlock(threadsPerBlock, 1, 1);
@@ -162,7 +185,7 @@ void test_ThreadsPerBlock() {
     if (TESTING) printf("\ntest_ThreadsPerBlock running with:\n\ttotalBlocks\t%d\t100%%\n\tblockSize\t%d\t%d%%\n", 
         totalBlocks, threadsPerBlock, ((int) (targetOccupancy * 100)));
 
-    doubleInt<<<dimGrid, dimBlock>>>(problemSize, threadsPerBlock);
+    doubleInt<<<dimGrid, dimBlock>>>(problemSize, totalThreads);
     cudaDeviceSynchronize();
 }
 
@@ -174,6 +197,7 @@ void test_ThreadsPerBlockPerKernel() {
     int threadsPerBlock = maxThreadsPerBlock * (1.0 - targetOccupancy);
     if (threadsPerBlock <= 0) threadsPerBlock = 1;
     if (totalBlocks <= 0) totalBlocks = 1;
+    int totalThreads = totalBlocks * threadsPerBlock;
 
     dim3 dimGrid(totalBlocks, 1, 1);                       
     dim3 dimBlock(threadsPerBlock, 1, 1);
@@ -182,7 +206,7 @@ void test_ThreadsPerBlockPerKernel() {
         totalBlocks, ((int) ceil((totalBlocks * 100.0) / (numSMs * maxBlocksPerSM))), 
         threadsPerBlock, ((int) ceil((threadsPerBlock * 100.0) / maxThreadsPerBlock)));
 
-    doubleInt<<<dimGrid, dimBlock>>>(problemSize, threadsPerBlock);
+    doubleInt<<<dimGrid, dimBlock>>>(problemSize, totalThreads);
     cudaDeviceSynchronize();
 }
 
@@ -190,14 +214,13 @@ void test_ThreadsPerBlockPerKernel() {
 // NO MEMORY ACCESS
 // IF PROBLEM SIZE > NUMBER OF THREADS, THREADS WILL PERFORM MORE THAN ONE ACTION
 __global__
-void doubleInt (int N, int blockSize) {
+void doubleInt (int N, int totalThreads) {
 
 	int id = (blockIdx.x * blockDim.x) + threadIdx.x;
-
 	id * 2.0;
 
-	while ((id + blockSize) < N) {
-		id += blockSize;
+	while ((id + totalThreads) < N) {
+		id += totalThreads;
 		id * 2.0;
 	}
 }
