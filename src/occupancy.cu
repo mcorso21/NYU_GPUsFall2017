@@ -159,7 +159,7 @@ void test_threadsAndBlocks() {
 void test_BlocksPerSM() {
 
     int totalBlocks = ((numSMs * maxBlocksPerSM) * targetOccupancy);
-    int threadsPerBlock = maxThreadsPerBlock;
+    int threadsPerBlock = maxThreadsPerSM/totalBlocks;
     int totalThreads = totalBlocks * threadsPerBlock;
 
     dim3 dimGrid(totalBlocks, 1, 1);                       
@@ -175,8 +175,8 @@ void test_BlocksPerSM() {
 // THREADS PER BLOCK (USES MAX NUMBER OF BLOCKS)
 void test_ThreadsPerBlock() {
 
-    int totalBlocks = (numSMs * maxBlocksPerSM);
     int threadsPerBlock = (maxThreadsPerBlock * targetOccupancy);
+    int totalBlocks = (maxThreadsPerSM / threadsPerBlock) * numSMs;
     int totalThreads = totalBlocks * threadsPerBlock;
 
     dim3 dimGrid(totalBlocks, 1, 1);                       
@@ -217,11 +217,11 @@ __global__
 void doubleInt (int N, int totalThreads) {
 
 	int id = (blockIdx.x * blockDim.x) + threadIdx.x;
-	id * 2.0;
+	// id * 2.0;
 
-	while ((id + totalThreads) < N) {
-		id += totalThreads;
+	while (id < N) {
 		id * 2.0;
+        id += totalThreads;
 	}
 }
 
