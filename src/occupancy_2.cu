@@ -60,15 +60,15 @@
 
 // DEBUG/TEST
 #define TESTING false
-#define PRINTTIME false
+#define PRINTTIME true
 
 //
 void howToUse();
 
 // OCCUPANCY FUNCTIONS
-double test_BlocksPerSM(int);
-double test_ThreadsPerBlock(int);
-double test_ThreadsPerBlockPerKernel(int);
+double test_BlocksPerSM();
+double test_ThreadsPerBlock();
+double test_ThreadsPerBlockPerKernel();
 
 // GPU SPEC FUNCTIONS
 void initDeviceVars();
@@ -85,7 +85,7 @@ __global__
 void vectorMaths2 (float *, float *, float *, int, int);
 
 // TEST VARIABLES
-int problemSize, occupancyMethod;
+int problemSize, occupancyMethod, functionToUse;
 double targetOccupancy;
 
 // DEVICE VARIABLES
@@ -98,7 +98,7 @@ int maxThreadsPerBlock,
 int main(int argc, char * argv[]) {
 
 	// HOW TO USE
-    if(argc != 4) howToUse();
+    if(argc != 5) howToUse();
 
 	// UPDATE DEVICE VARIABLES
 	initDeviceVars();
@@ -117,46 +117,45 @@ int main(int argc, char * argv[]) {
 
     // GET USER-SPECIFIED VARIABLES 
     occupancyMethod = (int) atoi(argv[1]);
-    targetOccupancy = ((double) (atoi(argv[2]) / 100.0));
+    functionToUse = (int) atoi(argv[2]);
+    targetOccupancy = ((double) (atoi(argv[3]) / 100.0));
     if (targetOccupancy > 1.0) targetOccupancy = 1.0;
     if (targetOccupancy == 0.0) targetOccupancy = 0.01;
-    problemSize = (int) atoi(argv[3]);
+    problemSize = (int) atoi(argv[4]);
     
     // FOR STORING TIMES
-    std::vector<double> times(9);
-    
-    // FOR EACH TEST
-    for (int i = 0; i < 3; i++) {
-        // RUN EACH TEST 9x
-        times.clear();
-        for (int i2 = 0; i2 < 9; i2++) {
-            // MAX BLOCKS THAT CAN RUN SIMULTANEOUSLY
-            if (occupancyMethod == 0) {
-                times.push_back(test_BlocksPerSM(i));
-            }
-            // MAX THREADS PER BLOCK
-            else if (occupancyMethod == 1) {
-                times.push_back(test_ThreadsPerBlock(i));
-            }
-            // THREADS/BLOCK INVERSED WITH BLOCKS/KERNEL
-            else if (occupancyMethod == 2) {
-                times.push_back(test_ThreadsPerBlockPerKernel(i));
-            }
-            else {
-                printf("\nNot an acceptable occupancyMethod!\n");
-                howToUse();
-            }
+    // std::vector<double> times(9);
+    // times.clear();
+    // for (int i2 = 0; i2 < 9; i2++) {
+        // MAX BLOCKS THAT CAN RUN SIMULTANEOUSLY
+        if (occupancyMethod == 0) {
+            // times.push_back(test_BlocksPerSM());
+            test_BlocksPerSM();
         }
-        std::sort (times.begin(), times.end());
-        if (PRINTTIME) 
-            printf("%d,%d,%.02f,%f\n", occupancyMethod, i, targetOccupancy, times.at(4));
-    }
-		
+        // MAX THREADS PER BLOCK
+        else if (occupancyMethod == 1) {
+            // times.push_back(test_ThreadsPerBlock());
+            test_ThreadsPerBlock();
+        }
+        // THREADS/BLOCK INVERSED WITH BLOCKS/KERNEL
+        else if (occupancyMethod == 2) {
+            // times.push_back(test_ThreadsPerBlockPerKernel());
+            test_ThreadsPerBlockPerKernel();
+        }
+        else {
+            printf("\nNot an acceptable occupancyMethod!\n");
+            howToUse();
+        }
+    // }
+    // std::sort (times.begin(), times.end());
+    // if (PRINTTIME) 
+    //     printf("%d,%d,%.02f,%f\n", occupancyMethod, functionToUse, targetOccupancy, times.at(4));
+    		
     return 0;
 }
 
 // BLOCKS PER SM / TOTAL BLOCKS IN THE KERNEL (USES MAX NUMBER OF THREADS PER BLOCK)
-double test_BlocksPerSM(int test) {
+double test_BlocksPerSM() {
 
     int totalBlocks = ((numSMs * maxBlocksPerSM) * targetOccupancy);
     if (totalBlocks < 1) totalBlocks = 1;
@@ -192,13 +191,13 @@ double test_BlocksPerSM(int test) {
     cudaMemcpy(outD, out, problemSize, cudaMemcpyHostToDevice);  
 
     clock_t start = clock();
-    if (test == 0) {
+    if (functionToUse == 0) {
         doubleInt<<<dimGrid, dimBlock>>>(problemSize, totalThreads);
     }
-    else if (test == 1) {
+    else if (functionToUse == 1) {
         vectorMaths1<<<dimGrid, dimBlock>>>(in1D, in2D, outD, problemSize, totalThreads);
     }
-    else if (test == 2) {
+    else if (functionToUse == 2) {
         vectorMaths2<<<dimGrid, dimBlock>>>(in1D, in2D, outD, problemSize, totalThreads);
     }
 
@@ -213,7 +212,7 @@ double test_BlocksPerSM(int test) {
 }
 
 // THREADS PER BLOCK (USES MAX NUMBER OF BLOCKS)
-double test_ThreadsPerBlock(int test) {
+double test_ThreadsPerBlock() {
 
     int threadsPerBlock = (maxThreadsPerBlock * targetOccupancy);
     while (threadsPerBlock % 32 != 0) threadsPerBlock -= 1;
@@ -247,13 +246,13 @@ double test_ThreadsPerBlock(int test) {
     cudaMemcpy(outD, out, problemSize, cudaMemcpyHostToDevice);  
 
     clock_t start = clock();
-    if (test == 0) {
+    if (functionToUse == 0) {
         doubleInt<<<dimGrid, dimBlock>>>(problemSize, totalThreads);
     }
-    else if (test == 1) {
+    else if (functionToUse == 1) {
         vectorMaths1<<<dimGrid, dimBlock>>>(in1D, in2D, outD, problemSize, totalThreads);
     }
-    else if (test == 2) {
+    else if (functionToUse == 2) {
         vectorMaths2<<<dimGrid, dimBlock>>>(in1D, in2D, outD, problemSize, totalThreads);
     }
     cudaDeviceSynchronize();
@@ -268,7 +267,7 @@ double test_ThreadsPerBlock(int test) {
 
 // THREADS/BLOCK INVERSED WITH BLOCKS/KERNEL
 // THIS ACTS LIKE A SEESAW: TOTALBLOCKS GOES UP AS THREADS PER BLOCK GOES DOWN AND VICE VERSA
-double test_ThreadsPerBlockPerKernel(int test) {
+double test_ThreadsPerBlockPerKernel() {
 
     int totalBlocks = ((numSMs * maxBlocksPerSM) * targetOccupancy);
     int threadsPerBlock = maxThreadsPerBlock * (1.0 - targetOccupancy);
@@ -302,13 +301,13 @@ double test_ThreadsPerBlockPerKernel(int test) {
     cudaMemcpy(outD, out, problemSize, cudaMemcpyHostToDevice);  
 
     clock_t start = clock();
-    if (test == 0) {
+    if (functionToUse == 0) {
         doubleInt<<<dimGrid, dimBlock>>>(problemSize, totalThreads);
     }
-    else if (test == 1) {
+    else if (functionToUse == 1) {
         vectorMaths1<<<dimGrid, dimBlock>>>(in1D, in2D, outD, problemSize, totalThreads);
     }
-    else if (test == 2) {
+    else if (functionToUse == 2) {
         vectorMaths2<<<dimGrid, dimBlock>>>(in1D, in2D, outD, problemSize, totalThreads);
     }
     cudaDeviceSynchronize();
@@ -445,9 +444,10 @@ void getMaxWarpsPerSM() {
 
 void howToUse() {
 
-    fprintf( stderr, "\nUsage: './occupancy [occupancyMethod] [targetOccupancy] [problemSize]'");
+    fprintf( stderr, "\nUsage: './occupancy [occupancyMethod] [functionToUse] [targetOccupancy] [problemSize]'");
     fprintf( stderr, "\n\tOccupancy Method:\n\t0: %% of max blocks that can run simultaneously\n\t1: %% of max threads per block\n\t2: inversely scale number of blocks with threads per block");
-    fprintf( stderr, "\n\n\tIE: './occupancy 0 75 100000' runs the kernel with 75%% of max blocks simultaneously assignable to all SMs and a problem size of 100,000");
+    fprintf( stderr, "\n\tFunction to Use:\n\t0: doubleInt\n\t1: vectorMaths1\n\t2:vectorMaths2");
+    fprintf( stderr, "\n\n\tIE: './occupancy 0 0 75 100000' runs the kernel with doubleInt() and 75%% of max blocks simultaneously assignable to all SMs and a problem size of 100,000");
 
     exit( 1 );
 }
