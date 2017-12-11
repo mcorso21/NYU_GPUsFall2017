@@ -283,6 +283,8 @@ double test_ThreadsPerBlock() {
     // CLEANUP
     free(in1); free(in2); free(out);
     cudaFree(in1D); cudaFree(in2D); cudaFree(outD);
+
+    return time_taken;
 }
 
 // THREADS/BLOCK INVERSED WITH BLOCKS/KERNEL
@@ -346,6 +348,8 @@ double test_ThreadsPerBlockPerKernel() {
     // CLEANUP
     free(in1); free(in2); free(out);
     cudaFree(in1D); cudaFree(in2D); cudaFree(outD);
+
+    return time_taken;
 }
 
 // SIMPLE FUNCTION TO MAKE THE THREAD PERFORM WORK
