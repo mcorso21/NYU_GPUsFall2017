@@ -14,38 +14,40 @@
  *      allows for grid and block dimensions to be constructed according to the specific device this code
  *      is running on.
  *
- *      (2) The occupancy-testing method is user-specified in the program's argument's:
+ *      (2) The code then scales the kernel's parameters based on the device's specifications using the 
+ *		user-specified values provided in the program's arguments:
  *
  *          (a) occupancyMethod: 
  *
- *              (1) Blocks per SM: Determines the maximum number of blocks assignable (IE [number of SMs] *
+ *              (0) Blocks per SM: Determines the maximum number of blocks assignable (IE [number of SMs] *
  *              [max blocks assignable to each SM]) and scales it based on the specified targetOccupancy.
  *              The number of threads per block is maxed.
  *
- *              (2) Threads per Block: Determines the maximum number of threads assignable to a block (IE
+ *              (1) Threads per Block: Determines the maximum number of threads assignable to a block (IE
  *              1024 is common) and scales this based on the specified targetOccupancy. The number of blocks
  *              is equal to ([number of SMs] * [max blocks assignable to each SM]).
  *
- *              (3) Inverted Blocks per Grid to Threads per Block: This combines the previous two tests by
+ *              (2) Inverted Blocks per Grid to Threads per Block: This combines the previous two tests by
  *              scaling the number of blocks simultaneously assignable (see (1) above) and the max number of
  *              threads per block (see (2) above). These values are inversely scaled based on the specified
  *              targetOccupancy (IE Specifying a 75% occupancy will set Blocks per SM to 75% of capacity and
  *              Threads per Block will be set to 25% of capacity).
  *
- *          (b) targetOccupancy: An integer value of 1 - 100 which specifies the percentage of the maximum 
+ *      	(b) The work being performed by the threads is user-specified in the program's arguments:
+ *      
+ *          	(0) doubleInt(): 	No memory accesses, simply multiples its thread id by 2
+ *
+ *          	(1) vectorMaths1(): Memory-bound vector addition, 3 memory accesses, 1 floating-point addition
+ *									CGMA = 1/3
+ *              
+ *          	(2) vectorMaths2(): Compute-bound vector math, 3 memory accesses, 90 floating-point operations
+ *									CGMA = 90/3 = 30
+ *
+ *          (c) targetOccupancy: An integer value of 1 - 100 which specifies the percentage of the maximum 
  *              occupancy for this test.
  *              
- *          (c) problemSize: An integer value which specifies the amount of work to be performed by the kernel
- *              (IE calling with a problemSize of 1000000 will cause the kernel to perform multiplication one
- *              million times)
- *
- *      (3) The work being performed by the threads:
- *      
- *          To avoid variations due to memory, whether they be memory accesses or running out of shared memory
- *          or insufficient registers, we chose to use a simple function which doubles the threads ID and does
- *          not store the result. Each thread will double its thread ID and determine if it needs to perform
- *          additional work. A thread must perform additional work when the problemSize exceeds the number of 
- *          threads in the grid.
+ *          (d) problemSize: An integer value which specifies the amount of work to be performed by the kernel
+ *              
  *
  */
 
@@ -127,25 +129,27 @@ int main(int argc, char * argv[]) {
     // std::vector<double> times(9);
     // times.clear();
     // for (int i2 = 0; i2 < 9; i2++) {
-        // MAX BLOCKS THAT CAN RUN SIMULTANEOUSLY
-        if (occupancyMethod == 0) {
-            // times.push_back(test_BlocksPerSM());
-            test_BlocksPerSM();
-        }
-        // MAX THREADS PER BLOCK
-        else if (occupancyMethod == 1) {
-            // times.push_back(test_ThreadsPerBlock());
-            test_ThreadsPerBlock();
-        }
-        // THREADS/BLOCK INVERSED WITH BLOCKS/KERNEL
-        else if (occupancyMethod == 2) {
-            // times.push_back(test_ThreadsPerBlockPerKernel());
-            test_ThreadsPerBlockPerKernel();
-        }
-        else {
-            printf("\nNot an acceptable occupancyMethod!\n");
-            howToUse();
-        }
+
+    // MAX BLOCKS THAT CAN RUN SIMULTANEOUSLY
+    if (occupancyMethod == 0) {
+        // times.push_back(test_BlocksPerSM());
+        test_BlocksPerSM();
+    }
+    // MAX THREADS PER BLOCK
+    else if (occupancyMethod == 1) {
+        // times.push_back(test_ThreadsPerBlock());
+        test_ThreadsPerBlock();
+    }
+    // THREADS/BLOCK INVERSED WITH BLOCKS/KERNEL
+    else if (occupancyMethod == 2) {
+        // times.push_back(test_ThreadsPerBlockPerKernel());
+        test_ThreadsPerBlockPerKernel();
+    }
+    else {
+        printf("\nNot an acceptable occupancyMethod!\n");
+        howToUse();
+    }
+
     // }
     // std::sort (times.begin(), times.end());
     // if (PRINTTIME) 
@@ -157,12 +161,17 @@ int main(int argc, char * argv[]) {
 // BLOCKS PER SM / TOTAL BLOCKS IN THE KERNEL (USES MAX NUMBER OF THREADS PER BLOCK)
 double test_BlocksPerSM() {
 
+	// NUMBER OF BLOCKS
     int totalBlocks = ((numSMs * maxBlocksPerSM) * targetOccupancy);
     if (totalBlocks < 1) totalBlocks = 1;
+    
+    // ATTEMPT TO DISTRIBUTE THREADS EVENLY 
     int threadsPerBlock = (maxThreadsPerSM / (totalBlocks / numSMs));
     while (threadsPerBlock % 32 != 0) threadsPerBlock -= 1;
     if (threadsPerBlock < 128) threadsPerBlock = 128;
+    if (threadsPerBlock > maxThreadsPerBlock) threadsPerBlock = maxThreadsPerBlock;
 
+    // TOTAL NUMBER OF THREADS IN THE GRID
     int totalThreads = totalBlocks * threadsPerBlock;
 
     dim3 dimGrid(totalBlocks, 1, 1);                       
@@ -171,7 +180,7 @@ double test_BlocksPerSM() {
     if (TESTING) printf("\ntest_MaxBlocksPerSM running with:\n\ttotalBlocks\t%d\t%d%%\n\tblockSize\t%d\t%.01f%%\n", 
         totalBlocks, ((int) (targetOccupancy * 100)), threadsPerBlock, (((float) threadsPerBlock / (float) maxThreadsPerBlock) * 100));
 
-
+    // ARRAYS FOR PERFORMING VECTOR MATH
     float * in1 = (float *) calloc((problemSize), sizeof(float));
     float * in2 = (float *) calloc((problemSize), sizeof(float));
     float * out = (float *) calloc((problemSize), sizeof(float));
@@ -190,6 +199,7 @@ double test_BlocksPerSM() {
     cudaMalloc((void **) &outD, problemSize);  
     cudaMemcpy(outD, out, problemSize, cudaMemcpyHostToDevice);  
 
+    // INITIALIZE TIMER BEFORE CALLING KERNEL
     clock_t start = clock();
     if (functionToUse == 0) {
         doubleInt<<<dimGrid, dimBlock>>>(problemSize, totalThreads);
@@ -201,10 +211,12 @@ double test_BlocksPerSM() {
         vectorMaths2<<<dimGrid, dimBlock>>>(in1D, in2D, outD, problemSize, totalThreads);
     }
 
+    // SYNC DEVICE AND GET TIME TAKEN
     cudaDeviceSynchronize();
     clock_t end = clock();
     double time_taken = ((double)(end - start)) / CLOCKS_PER_SEC;
 
+    // CLEANUP
     free(in1); free(in2); free(out);
     cudaFree(in1D); cudaFree(in2D); cudaFree(outD);
 
@@ -214,11 +226,16 @@ double test_BlocksPerSM() {
 // THREADS PER BLOCK (USES MAX NUMBER OF BLOCKS)
 double test_ThreadsPerBlock() {
 
+	// NUMBER OF THREADS PER BLOCK
     int threadsPerBlock = (maxThreadsPerBlock * targetOccupancy);
     while (threadsPerBlock % 32 != 0) threadsPerBlock -= 1;
     if (threadsPerBlock < 1) threadsPerBlock = 1;
+
+    // NUMBER OF BLOCKS
     int totalBlocks = (maxThreadsPerSM / threadsPerBlock) * numSMs;
     if (totalBlocks < 1) totalBlocks = 1;
+
+    // TOTAL NUMBER OF THREADS IN THE GRID
     int totalThreads = totalBlocks * threadsPerBlock;
 
     dim3 dimGrid(totalBlocks, 1, 1);                       
@@ -227,6 +244,7 @@ double test_ThreadsPerBlock() {
     if (TESTING) printf("\ntest_ThreadsPerBlock running with:\n\ttotalBlocks\t%d\t100%%\n\tblockSize\t%d\t%d%%\n", 
         totalBlocks, threadsPerBlock, ((int) (targetOccupancy * 100)));
 
+    // ARRAYS FOR PERFORMING VECTOR MATH
     float * in1 = (float *) calloc((problemSize), sizeof(float));
     float * in2 = (float *) calloc((problemSize), sizeof(float));
     float * out = (float *) calloc((problemSize), sizeof(float));
@@ -245,6 +263,7 @@ double test_ThreadsPerBlock() {
     cudaMalloc((void **) &outD, problemSize);  
     cudaMemcpy(outD, out, problemSize, cudaMemcpyHostToDevice);  
 
+    // INITIALIZE TIMER BEFORE CALLING KERNEL
     clock_t start = clock();
     if (functionToUse == 0) {
         doubleInt<<<dimGrid, dimBlock>>>(problemSize, totalThreads);
@@ -255,24 +274,30 @@ double test_ThreadsPerBlock() {
     else if (functionToUse == 2) {
         vectorMaths2<<<dimGrid, dimBlock>>>(in1D, in2D, outD, problemSize, totalThreads);
     }
+
+    // SYNC DEVICE AND GET TIME TAKEN
     cudaDeviceSynchronize();
     clock_t end = clock();
     double time_taken = ((double)(end - start)) / CLOCKS_PER_SEC;
 
+    // CLEANUP
     free(in1); free(in2); free(out);
     cudaFree(in1D); cudaFree(in2D); cudaFree(outD);
-
-    return time_taken;
 }
 
 // THREADS/BLOCK INVERSED WITH BLOCKS/KERNEL
 // THIS ACTS LIKE A SEESAW: TOTALBLOCKS GOES UP AS THREADS PER BLOCK GOES DOWN AND VICE VERSA
 double test_ThreadsPerBlockPerKernel() {
 
+	// NUMBER OF BLOCKS
     int totalBlocks = ((numSMs * maxBlocksPerSM) * targetOccupancy);
+
+    // THREADS PER BLOCK
     int threadsPerBlock = maxThreadsPerBlock * (1.0 - targetOccupancy);
     if (threadsPerBlock <= 0) threadsPerBlock = 1;
     if (totalBlocks <= 0) totalBlocks = 1;
+
+    // TOTAL NUMBER OF THREADS IN THE GRID
     int totalThreads = totalBlocks * threadsPerBlock;
 
     dim3 dimGrid(totalBlocks, 1, 1);                       
@@ -282,6 +307,7 @@ double test_ThreadsPerBlockPerKernel() {
         totalBlocks, ((int) ceil((totalBlocks * 100.0) / (numSMs * maxBlocksPerSM))), 
         threadsPerBlock, ((int) ceil((threadsPerBlock * 100.0) / maxThreadsPerBlock)));
 
+    // ARRAYS FOR PERFORMING VECTOR MATH
     float * in1 = (float *) calloc((problemSize), sizeof(float));
     float * in2 = (float *) calloc((problemSize), sizeof(float));
     float * out = (float *) calloc((problemSize), sizeof(float));
@@ -300,6 +326,7 @@ double test_ThreadsPerBlockPerKernel() {
     cudaMalloc((void **) &outD, problemSize);  
     cudaMemcpy(outD, out, problemSize, cudaMemcpyHostToDevice);  
 
+    // INITIALIZE TIMER BEFORE CALLING KERNEL
     clock_t start = clock();
     if (functionToUse == 0) {
         doubleInt<<<dimGrid, dimBlock>>>(problemSize, totalThreads);
@@ -310,14 +337,15 @@ double test_ThreadsPerBlockPerKernel() {
     else if (functionToUse == 2) {
         vectorMaths2<<<dimGrid, dimBlock>>>(in1D, in2D, outD, problemSize, totalThreads);
     }
+
+    // SYNC DEVICE AND GET TIME TAKEN
     cudaDeviceSynchronize();
     clock_t end = clock();
     double time_taken = ((double)(end - start)) / CLOCKS_PER_SEC;
 
+    // CLEANUP
     free(in1); free(in2); free(out);
     cudaFree(in1D); cudaFree(in2D); cudaFree(outD);
-
-    return time_taken;
 }
 
 // SIMPLE FUNCTION TO MAKE THE THREAD PERFORM WORK
@@ -330,6 +358,7 @@ void doubleInt (int N, int totalThreads) {
     int val = id;
 
 	while (id < N) {
+        val = id;
         val *= 2;
         id += totalThreads;
 	}
@@ -358,7 +387,6 @@ void vectorMaths2 (float * in1, float * in2, float * out, int N, int totalThread
 	while (id < N) {
         float t1 = in1[id];
         float t2 = in2[id];
-		// Artificially inflate CGMA
         float tt = t1 + t2;
 		for (int i = 0; i < 10; i++)
 			tt *= 3.14 * 2.718 / .57721 - 4.6692 + 1.61803 * 131.7 - 530.1874 / 51.9;
