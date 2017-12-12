@@ -178,7 +178,7 @@ double test_BlocksPerGrid() {
     cudaMemcpy(outD, out, problemSize, cudaMemcpyHostToDevice);  
 
     // INITIALIZE TIMER BEFORE CALLING KERNEL
-    // clock_t start = clock();
+    clock_t start = clock();
     if (functionToUse == 0) {
         doubleInt<<<dimGrid, dimBlock>>>(problemSize, totalThreads);
     }
@@ -191,8 +191,8 @@ double test_BlocksPerGrid() {
 
     // SYNC DEVICE AND GET TIME TAKEN
     cudaDeviceSynchronize();
-    // clock_t end = clock();
-    // double time_taken = ((double)(end - start)) / CLOCKS_PER_SEC;
+    clock_t end = clock();
+    double time_taken = ((double)(end - start)) / CLOCKS_PER_SEC;
 
     // CLEANUP
     free(in1); free(in2); free(out);
