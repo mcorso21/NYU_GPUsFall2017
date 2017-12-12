@@ -3,15 +3,16 @@ import os
 import subprocess as sp
 from datetime import datetime
 
-problemSize = 1000000000
+problemSize = 1000000
 output = []
 
 # FOR EACH TARGET OCCPUANCY 5-100, 5% INCREMENTS
-for i in range(1,21): #1,21
-	targetOccupancy = (i * 5)
+for i in range(1,11): # 10, 20, 30, ..., 90, 100%
+	targetOccupancy = (i * 10)
 	# FOR EACH OCCUPANCY METHOD
-	for i2 in range(0,3):
-		for i3 in range(0,3):
+	for i2 in range(0,2): # 0, 1
+		# FOR EACH WORK FUNCTION
+		for i3 in range(0,3): # 0, 1, 2
 			times = []
 			# RUN TEST 9X
 			for i4 in range(0,9):
